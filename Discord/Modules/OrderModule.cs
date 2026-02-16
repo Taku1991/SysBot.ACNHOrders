@@ -340,24 +340,28 @@ namespace SysBot.ACNHOrders
             var cooldown = Globals.Bot.Config.OrderConfig.PositionCommandCooldown;
             if (!CanCommand(Context.User.Id, cooldown, true))
             {
-                await ReplyAsync($"{Context.User.Mention} - This command has a {cooldown} second cooldown. Use this bot responsibly.").ConfigureAwait(false);
+                await ReplyAsync($"{Context.User.Mention} - Dieser Befehl hat einen {cooldown}-Sekunden-Cooldown.").ConfigureAwait(false);
                 return;
             }
 
             var position = QueueExtensions.GetPosition(Context.User.Id, out _);
             if (position < 0)
             {
-                await ReplyAsync("Sorry, you are not in the queue, or your order is happening now.").ConfigureAwait(false);
+                await ReplyAsync($"{Context.User.Mention} - Du bist nicht in der Warteschlange oder deine Bestellung wird gerade bearbeitet.").ConfigureAwait(false);
                 return;
             }
 
-            var message = $"{Context.User.Mention} - You are in the order queue. Position: {position}.";
-            if (position > 1)
-                message += $" Your predicted ETA is {QueueExtensions.GetETA(position)}.";
-            else
-                message += " Your order will start after the current order is complete!";
+            var embed = new EmbedBuilder()
+                .WithTitle("Warteschlangen-Position")
+                .WithColor(Color.Blue)
+                .AddField("Position", $"**{position}**", inline: true);
 
-            await ReplyAsync(message).ConfigureAwait(false);
+            if (position > 1)
+                embed.AddField("Wartezeit", QueueExtensions.GetETA(position), inline: true);
+            else
+                embed.AddField("Status", "Du bist als Nächstes dran!", inline: true);
+
+            await ReplyAsync(embed: embed.Build()).ConfigureAwait(false);
             await Context.Message.DeleteAsync().ConfigureAwait(false);
         }
 
@@ -370,12 +374,12 @@ namespace SysBot.ACNHOrders
             QueueExtensions.GetPosition(Context.User.Id, out var order);
             if (order == null)
             {
-                await ReplyAsync($"{Context.User.Mention} - Sorry, you are not in the queue, or your order is happening now.").ConfigureAwait(false);
+                await ReplyAsync($"{Context.User.Mention} - Du bist nicht in der Warteschlange oder deine Bestellung wird gerade bearbeitet.").ConfigureAwait(false);
                 return;
             }
 
             Globals.Hub.Orders.RemoveByUserId(Context.User.Id);
-            await ReplyAsync($"{Context.User.Mention} - Your order has been removed. You can rejoin the queue at any time.").ConfigureAwait(false);
+            await ReplyAsync($"{Context.User.Mention} - Deine Bestellung wurde entfernt. Du kannst jederzeit erneut bestellen.").ConfigureAwait(false);
         }
 
         [Command("removeUser")]
@@ -505,39 +509,39 @@ namespace SysBot.ACNHOrders
         {
             if (!Globals.Bot.Config.AllowKnownAbusers && LegacyAntiAbuse.CurrentInstance.IsGlobalBanned(orderer.Id))
             {
-                await ReplyAsync($"{Context.User.Mention} - You are not permitted to use this bot.");
+                await ReplyAsync($"{Context.User.Mention} - Du darfst diesen Bot nicht verwenden.");
                 return;
             }
 
             if (Globals.Bot.Config.DodoModeConfig.LimitedDodoRestoreOnlyMode || Globals.Bot.Config.SkipConsoleBotCreation)
             {
-                await ReplyAsync($"{Context.User.Mention} - Orders are not currently accepted.");
+                await ReplyAsync($"{Context.User.Mention} - Bestellungen werden aktuell nicht angenommen.");
                 return;
             }
 
             if (GlobalBan.IsBanned(orderer.Id.ToString()))
             {
-                await ReplyAsync($"{Context.User.Mention} - You have been banned for abuse. Order has not been accepted.");
+                await ReplyAsync($"{Context.User.Mention} - Du wurdest gesperrt. Bestellung nicht angenommen.");
                 return;
             }
 
             var currentOrderCount = Globals.Hub.Orders.Count;
             if (currentOrderCount >= MaxOrderCount)
             {
-                var requestLimit = $"The queue limit has been reached, there are currently {currentOrderCount} players in the queue. Please try again later.";
+                var requestLimit = $"Die Warteschlange ist voll ({currentOrderCount} Bestellungen). Bitte versuche es später erneut.";
                 await ReplyAsync(requestLimit).ConfigureAwait(false);
                 return;
             }
 
             if (!InternalItemTool.CurrentInstance.IsSaneAfterCorrection(items, Globals.Bot.Config.DropConfig))
             {
-                await ReplyAsync($"{Context.User.Mention} - You are attempting to order items that will damage your save. Order not accepted.");
+                await ReplyAsync($"{Context.User.Mention} - Diese Items würden deinen Spielstand beschädigen. Bestellung nicht angenommen.");
                 return;
             }
 
             if (items.Count > MultiItem.MaxOrder)
             {
-                var clamped = $"Users are limited to {MultiItem.MaxOrder} items per command, You've asked for {items.Count}. All items above the limit have been removed.";
+                var clamped = $"Maximal {MultiItem.MaxOrder} Items pro Bestellung erlaubt. Du hast {items.Count} angefragt. Überschüssige Items wurden entfernt.";
                 await ReplyAsync(clamped).ConfigureAwait(false);
                 items = items.Take(40).ToArray();
             }

@@ -57,5 +57,8 @@ namespace SysBot.ACNHOrders
 
         /// <summary> How much extra time to wait for arrivals in ms </summary>
         public int ArrivalExtraWaitTime { get; set; } = 1000;
+
+        /// <summary> Path to the MenuIcon sprite folder (e.g. NHSE.Sprites/Resources/MenuIcon). Leave empty to disable sprite images in embeds. </summary>
+        public string SpritesPath { get; set; } = "";
     }
 }

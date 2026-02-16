@@ -3,10 +3,12 @@ using Discord.Commands;
 using Discord.WebSocket;
 using Discord.Net;
 using NHSE.Core;
+using System.IO;
 using System.Threading.Tasks;
 using System.Linq;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace SysBot.ACNHOrders
 {
@@ -20,68 +22,134 @@ namespace SysBot.ACNHOrders
             IUserMessage test;
             try
             {
-                const string helper = "I've added you to the queue! I'll message you here when your order is ready";
-                test = await trader.SendMessageAsync(helper).ConfigureAwait(false);
+                var dmEmbed = new EmbedBuilder()
+                    .WithTitle("In die Warteschlange aufgenommen!")
+                    .WithDescription("Ich schreibe dir hier, sobald deine Bestellung bereit ist.")
+                    .WithColor(Color.Blue)
+                    .Build();
+                test = await trader.SendMessageAsync(embed: dmEmbed).ConfigureAwait(false);
             }
             catch (HttpException ex)
             {
                 await Context.Channel.SendMessageAsync($"{ex.HttpCode}: {ex.Reason}!").ConfigureAwait(false);
-                var noAccessMsg = Context.User == trader ? "You must enable private messages in order to be queued!" : $"{player} must enable private messages in order for them to be queued!";
+                var noAccessMsg = Context.User == trader
+                    ? "Du musst Direktnachrichten aktivieren, um in die Warteschlange zu kommen!"
+                    : $"{player} muss Direktnachrichten aktivieren!";
                 await Context.Channel.SendMessageAsync(noAccessMsg).ConfigureAwait(false);
                 return;
             }
 
-            var result = AttemptAddToQueue(itemReq, trader.Mention, trader.Username, out var msg);
-
-            await Context.Channel.SendMessageAsync(msg).ConfigureAwait(false);
-            await trader.SendMessageAsync(msg).ConfigureAwait(false);
+            var result = AttemptAddToQueue(itemReq, trader.Mention, trader.Username, out var msg, out int position, out string eta);
 
             if (result)
             {
+                // Bestellungs-Embed mit Item-Liste erstellen
+                var itemList = OrderRequest<Item>.GetPokemon_ItemListString(itemReq.Order);
+                var spriteData = ItemSpriteComposer.ComposeItemGrid(itemReq.Order, Globals.Bot.Config.OrderConfig.SpritesPath);
+                bool hasImage = spriteData != null;
+                var embed = BuildOrderEmbed(itemReq, itemList, position, eta, trader, hasImage);
+
+                if (hasImage)
+                {
+                    using var channelStream = new MemoryStream(spriteData!);
+                    await Context.Channel.SendFileAsync(channelStream, "items.png", embed: embed).ConfigureAwait(false);
+                    using var dmStream = new MemoryStream(spriteData!);
+                    await trader.SendFileAsync(dmStream, "items.png", embed: embed).ConfigureAwait(false);
+                }
+                else
+                {
+                    await Context.Channel.SendMessageAsync(embed: embed).ConfigureAwait(false);
+                    await trader.SendMessageAsync(embed: embed).ConfigureAwait(false);
+                }
+
                 if (!Context.IsPrivate)
                     await Context.Message.DeleteAsync(RequestOptions.Default).ConfigureAwait(false);
             }
             else
             {
+                await Context.Channel.SendMessageAsync(msg).ConfigureAwait(false);
                 await test.DeleteAsync().ConfigureAwait(false);
             }
         }
 
+        private static Embed BuildOrderEmbed(OrderRequest<Item> itemReq, string itemList, int position, string eta, SocketUser trader, bool hasImage = false)
+        {
+            var builder = new EmbedBuilder()
+                .WithTitle("Bestellung aufgenommen!")
+                .WithColor(Color.Green)
+                .WithCurrentTimestamp();
+
+            builder.AddField("Besteller", trader.Mention, inline: true);
+            builder.AddField("Position", $"**{position}**", inline: true);
+
+            if (!string.IsNullOrEmpty(eta))
+                builder.AddField("Wartezeit", eta, inline: true);
+
+            if (Globals.Bot.Config.OrderConfig.ShowIDs)
+                builder.AddField("Bestell-ID", $"#{itemReq.OrderID}", inline: true);
+
+            // Item-Liste (max 1024 Zeichen für ein Embed-Field)
+            if (itemList.Length > 1024)
+                itemList = itemList[..1020] + "\n...";
+            builder.AddField($"Bestellte Items", itemList, inline: false);
+
+            if (itemReq.VillagerOrder != null)
+            {
+                var villagerName = GameInfo.Strings.GetVillager(itemReq.VillagerOrder.GameName);
+                builder.AddField("Bewohner", $"{villagerName} wartet auf der Insel auf dich!", inline: false);
+            }
+
+            if (hasImage)
+                builder.WithImageUrl("attachment://items.png");
+
+            builder.WithFooter("Du erhältst eine DM mit dem Dodo-Code, sobald du dran bist.");
+
+            return builder.Build();
+        }
+
         public static bool AddToQueueSync(IACNHOrderNotifier<Item> itemReq, string playerMention, string playerNameId, out string msg)
         {
-            var result = AttemptAddToQueue(itemReq, playerMention, playerNameId, out var msge);
+            var result = AttemptAddToQueue(itemReq, playerMention, playerNameId, out var msge, out _, out _);
             msg = msge;
             return result;
         }
 
-        private static bool AttemptAddToQueue(IACNHOrderNotifier<Item> itemReq, string traderMention, string traderDispName, out string msg)
+        private static bool AttemptAddToQueue(IACNHOrderNotifier<Item> itemReq, string traderMention, string traderDispName, out string msg, out int position, out string eta)
         {
             var orders = Globals.Hub.Orders;
-            
+            position = -1;
+            eta = string.Empty;
+
             var existingOrder = orders.GetByUserId(itemReq.UserGuid);
             if (existingOrder != null)
             {
-                msg = $"{traderMention} - Sorry, you are already in the queue.";
+                msg = $"{traderMention} - Du bist bereits in der Warteschlange.";
                 return false;
             }
 
             if(Globals.Bot.CurrentUserName == traderDispName)
             {
-                msg = $"{traderMention} - Failed to queue your order as it is the current processing order. Please wait a few seconds for the queue to clear if you've already completed it.";
+                msg = $"{traderMention} - Deine Bestellung wird gerade bearbeitet. Bitte warte einen Moment.";
                 return false;
             }
 
-            var position = orders.Count + 1;
+            position = orders.Count + 1;
             var idToken = Globals.Bot.Config.OrderConfig.ShowIDs ? $" (ID {itemReq.OrderID})" : string.Empty;
-            msg = $"{traderMention} - Added you to the order queue{idToken}. Your position is: **{position}**";
+            msg = $"{traderMention} - Zur Warteschlange hinzugefügt{idToken}. Position: **{position}**";
 
             if (position > 1)
-                msg += $". Your predicted ETA is {GetETA(position)}";
+            {
+                eta = GetETA(position);
+                msg += $". Voraussichtliche Wartezeit: {eta}";
+            }
             else
-                msg += ". Your order will start after the current order is complete!";
+            {
+                eta = "Du bist als Nächstes dran!";
+                msg += ". Deine Bestellung startet nach der aktuellen!";
+            }
 
             if (itemReq.VillagerOrder != null)
-                msg += $". {GameInfo.Strings.GetVillager(itemReq.VillagerOrder.GameName)} will be waiting for you on the island. Ensure you can collect them within the order timeframe.";
+                msg += $". {GameInfo.Strings.GetVillager(itemReq.VillagerOrder.GameName)} wartet auf der Insel auf dich.";
 
             Globals.Hub.Orders.Enqueue(itemReq);
 
@@ -92,7 +160,7 @@ namespace SysBot.ACNHOrders
         {
             var orders = Globals.Hub.Orders;
             var position = orders.GetPosition(id);
-            
+
             if (position > 0)
             {
                 var found = orders.GetByUserId(id);
@@ -148,4 +216,3 @@ namespace SysBot.ACNHOrders
         }
     }
 }
-

@@ -356,3 +356,6 @@ MigrationBackup/
 
 # MacOS Build & Run local development scripts
 br.bash
+
+# Config with sensitive tokens
+config.json
