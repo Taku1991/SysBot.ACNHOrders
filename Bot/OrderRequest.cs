@@ -73,18 +73,34 @@ namespace SysBot.ACNHOrders
                     .WithColor(Color.Gold)
                     .WithCurrentTimestamp();
 
+                var attachments = new List<FileAttachment>();
+
+                // Dodo-Code als Bild (über DodoImageDrawer)
+                var draw = routine.DodoImageDrawer;
+                string? dodoImagePath = null;
+                if (draw != null)
+                {
+                    dodoImagePath = draw.GetProcessedDodoImagePath();
+                    if (dodoImagePath != null)
+                        builder.WithImageUrl("attachment://dodo.png");
+                }
+
+                // Item-Sprite-Grid
                 var spriteData = ItemSpriteComposer.ComposeItemGrid(Order, Globals.Bot.Config.OrderConfig.SpritesPath);
                 if (spriteData != null)
-                {
-                    builder.WithImageUrl("attachment://items.png");
-                    var embed = builder.Build();
-                    using var stream = new MemoryStream(spriteData);
-                    Trader.SendFileAsync(stream, "items.png", embed: embed);
-                }
+                    builder.WithThumbnailUrl("attachment://items.png");
+
+                var embed = builder.Build();
+
+                if (dodoImagePath != null)
+                    attachments.Add(new FileAttachment(dodoImagePath, "dodo.png"));
+                if (spriteData != null)
+                    attachments.Add(new FileAttachment(new MemoryStream(spriteData), "items.png"));
+
+                if (attachments.Count > 0)
+                    Trader.SendFilesAsync(attachments, embed: embed);
                 else
-                {
-                    Trader.SendMessageAsync(embed: builder.Build());
-                }
+                    Trader.SendMessageAsync(embed: embed);
             }
             catch (Exception e)
             {
