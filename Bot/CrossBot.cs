@@ -840,7 +840,8 @@ namespace SysBot.ACNHOrders
 
             OverworldState state = OverworldState.Unknown;
             bool isUserArriveLeaving = false;
-            // Ensure we're on overworld before starting timer/drop loop
+            // Ensure we're on overworld before starting timer/drop loop, or wait for timeout
+            int timer = 150;
             while (state != OverworldState.Overworld)
             {
                 state = await DodoPosition.GetOverworldState(OffsetHelper.PlayerCoordJumps, token).ConfigureAwait(false);
@@ -858,10 +859,16 @@ namespace SysBot.ACNHOrders
                     isUserArriveLeaving = false;
                 }
 
-                await VisitorList.UpdateNames(token).ConfigureAwait(false);
-                if (VisitorList.VisitorCount < 2)
-                    break;
+                if (timer-- < 1)
+                {
+                    // Took too long, cancel their order
+                    LogUtil.LogError($"Visitor took too long to arrive. Removed from queue, moving to next order.", Config.IP);
+                    order.OrderCancelled(this, "Du hast zu lange gebraucht. Dies liegt vermutlich an einem Verbindungsproblem. Deine Bestellung wurde entfernt.", false);
+                    return OrderResult.NoArrival;
+                }
             }
+
+            LogUtil.LogInfo($"Visitor has arrived. Starting countdown.", Config.IP);
 
             await UpdateBlocker(false, token).ConfigureAwait(false);
 
