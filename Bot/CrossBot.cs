@@ -460,6 +460,10 @@ namespace SysBot.ACNHOrders
 
             ChargePercent = await SwitchConnection.GetChargePercentAsync(token).ConfigureAwait(false);
 
+            // Process standalone villager injection requests (e.g. %iv command)
+            if (VillagerInjections.TryDequeue(out var vil))
+                await Villagers.InjectVillager(vil, token).ConfigureAwait(false);
+
             await Task.Delay(1_000, token).ConfigureAwait(false);
         }
 
@@ -488,7 +492,7 @@ namespace SysBot.ACNHOrders
             catch (OperationCanceledException e)
             {
                 LogUtil.LogInfo($"{order.VillagerName} ({order.UserGuid}) had their order timeout: {e.Message}.", Config.IP);
-                order.OrderCancelled(this, "Unfortunately a game crash occured while your order was in progress. Sorry, your request has been removed.", true);
+                order.OrderCancelled(this, "Leider ist das Spiel während deiner Bestellung abgestürzt. Deine Bestellung wurde entfernt.", true);
             }
 
             if (result == OrderResult.Success)
@@ -587,7 +591,7 @@ namespace SysBot.ACNHOrders
                 {
                     var error = "Failed to reach the overworld.";
                     LogUtil.LogError($"{error} Trying next request.", Config.IP);
-                    order.OrderCancelled(this, $"{error} Sorry, your request has been removed.", true);
+                    order.OrderCancelled(this, "Die Spielwelt konnte nicht erreicht werden. Deine Bestellung wurde entfernt.", true);
                     return OrderResult.Faulted;
                 }
 
@@ -719,7 +723,7 @@ namespace SysBot.ACNHOrders
             {
                 var error = "Failed to connect to the internet and obtain a Dodo code.";
                 LogUtil.LogError($"{error} Trying next request.", Config.IP);
-                order.OrderCancelled(this, $"A connection error occured: {error} Sorry, your request has been removed.", true);
+                order.OrderCancelled(this, "Verbindungsfehler: Es konnte kein Dodo-Code abgerufen werden. Deine Bestellung wurde entfernt.", true);
                 return OrderResult.Faulted;
             }
 
@@ -729,7 +733,7 @@ namespace SysBot.ACNHOrders
             if (!ignoreInjection)
             {
                 LogUtil.LogInfo($"Sending Dodo Code {DodoCode} to {order.VillagerName}", Config.IP);
-                order.OrderReady(this, $"You have {(int)(Config.OrderConfig.WaitForArriverTime * 0.9f)} seconds to arrive. My island name is **{TownName}**", DodoCode);
+                order.OrderReady(this, $"Du hast {(int)(Config.OrderConfig.WaitForArriverTime * 0.9f)} Sekunden zum Ankommen. Meine Insel heißt **{TownName}**", DodoCode);
             }
 
             // Clear username of last arrival (again)
@@ -778,7 +782,7 @@ namespace SysBot.ACNHOrders
                 {
                     var error = "Visitor failed to arrive.";
                     LogUtil.LogError($"{error}. Removed from queue, moving to next order.", Config.IP);
-                    order.OrderCancelled(this, $"{error} Your request has been removed.", false);
+                    order.OrderCancelled(this, "Besucher ist nicht erschienen. Deine Bestellung wurde entfernt.", false);
                     return OrderResult.NoArrival;
                 }
             }
@@ -813,9 +817,9 @@ namespace SysBot.ACNHOrders
                 {
                     LogUtil.LogInfo($"{LastArrival} from {LastArrivalIsland} is a known abuser. Starting next order...", Config.IP);
                     if (!IsRestricted)
-                        order.OrderCancelled(this, $"You are a known abuser. You cannot use this bot.", false);
+                        order.OrderCancelled(this, "Du bist als Missbraucher bekannt. Du kannst diesen Bot nicht verwenden.", false);
                     else
-                        order.OrderCancelled(this, $"You are unable to visit the island at this time.", false);
+                        order.OrderCancelled(this, "Du kannst die Insel derzeit nicht besuchen.", false);
                     await RestartGame(token).ConfigureAwait(false);
                     await Task.Delay(2_000, token).ConfigureAwait(false);
                     await Click(SwitchButton.A, 0_500, token).ConfigureAwait(false);
@@ -827,7 +831,7 @@ namespace SysBot.ACNHOrders
                 }
             }
 
-            order.SendNotification(this, $"Visitor arriving: {LastArrival}. Your items will be in front of you once you land.");
+            order.SendNotification(this, $"Besucher kommt an: {LastArrival}. Deine Items liegen vor dir, sobald du landest.");
             if (order.VillagerName != string.Empty && Config.OrderConfig.EchoArrivingLeavingChannels.Count > 0)
                 await AttemptEchoHook($"> Visitor arriving: {order.VillagerName}", Config.OrderConfig.EchoArrivingLeavingChannels, token).ConfigureAwait(false);
 
@@ -874,7 +878,7 @@ namespace SysBot.ACNHOrders
                 await Task.Delay(1_000, token).ConfigureAwait(false);
                 if (Math.Abs((DateTime.Now - startTime).TotalSeconds) > (Config.OrderConfig.UserTimeAllowed - 60) && !warned)
                 {
-                    order.SendNotification(this, "You have 60 seconds remaining before I start the next order. Please ensure you can collect your items and leave within that time.");
+                    order.SendNotification(this, "Du hast noch 60 Sekunden, bevor die nächste Bestellung startet. Bitte sammle deine Items ein und verlasse die Insel.");
                     warned = true;
                 }
 
@@ -882,7 +886,7 @@ namespace SysBot.ACNHOrders
                 {
                     var error = "Visitor failed to leave.";
                     LogUtil.LogError($"{error}. Removed from queue, moving to next order.", Config.IP);
-                    order.OrderCancelled(this, $"{error} Your request has been removed.", false);
+                    order.OrderCancelled(this, "Besucher hat die Insel nicht rechtzeitig verlassen. Deine Bestellung wurde entfernt.", false);
                     return OrderResult.NoLeave;
                 }
 
@@ -890,7 +894,7 @@ namespace SysBot.ACNHOrders
                 {
                     var error = "Network crash detected.";
                     LogUtil.LogError($"{error}. Removed from queue, moving to next order.", Config.IP);
-                    order.OrderCancelled(this, $"{error} Your request has been removed.", true);
+                    order.OrderCancelled(this, "Netzwerkfehler erkannt. Deine Bestellung wurde entfernt.", true);
                     return OrderResult.Faulted;
                 }
             }

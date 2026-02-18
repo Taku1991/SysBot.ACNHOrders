@@ -598,7 +598,17 @@ namespace SysBot.ACNHOrders
             internalName = internalName.Trim();
 
             if (!VillagerResources.IsVillagerDataKnown(internalName))
+            {
+                // Try default language (English)
                 internalName = GameInfo.Strings.VillagerMap.FirstOrDefault(z => string.Equals(z.Value, internalName, StringComparison.InvariantCultureIgnoreCase)).Key;
+
+                // Fallback: try German
+                if (internalName == default)
+                {
+                    var deStrings = GameInfo.GetStrings("de");
+                    internalName = deStrings.VillagerMap.FirstOrDefault(z => string.Equals(z.Value, nameSearched.Trim(), StringComparison.InvariantCultureIgnoreCase)).Key;
+                }
+            }
 
             if (IsUnadoptable(nameSearched) || IsUnadoptable(internalName))
             {

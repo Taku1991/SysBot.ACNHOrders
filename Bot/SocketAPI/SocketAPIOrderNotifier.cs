@@ -37,7 +37,7 @@ namespace SysBot.ACNHOrders
             {
                 userId = UserGuid,
                 orderId = OrderID,
-                message = $"Your order is starting! Please ensure your inventory is empty, then go talk to Orville and stay on the Dodo code entry screen. {msg}"
+                message = $"Deine Bestellung startet! Bitte stelle sicher, dass dein Inventar leer ist, dann sprich mit Bodo und bleib auf dem Dodo-Code-Eingabebildschirm. {msg}"
             });
         }
 
@@ -51,7 +51,7 @@ namespace SysBot.ACNHOrders
                 userId = UserGuid,
                 orderId = OrderID,
                 dodoCode = dodo,
-                message = $"Your Dodo code is: {dodo}. {msg}"
+                message = $"Dein Dodo-Code ist: {dodo}. {msg}"
             });
         }
 

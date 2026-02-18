@@ -30,12 +30,6 @@ namespace SysBot.ACNHOrders
 
         private async Task InjectVillagers(int startIndex, string[] villagerNames)
         {
-            if (!Globals.Bot.Config.DodoModeConfig.LimitedDodoRestoreOnlyMode)
-            {
-                await ReplyAsync($"{Context.User.Mention} - Villagers cannot be injected in order mode.").ConfigureAwait(false);
-                return;
-            }
-
             if (!Globals.Bot.Config.AllowVillagerInjection)
             {
                 await ReplyAsync($"{Context.User.Mention} - Villager injection is currently disabled.").ConfigureAwait(false);
@@ -58,7 +52,17 @@ namespace SysBot.ACNHOrders
                 var nameSearched = internalName;
 
                 if (!VillagerResources.IsVillagerDataKnown(internalName))
+                {
+                    // Try default language (English)
                     internalName = GameInfo.Strings.VillagerMap.FirstOrDefault(z => string.Equals(z.Value, internalName, StringComparison.InvariantCultureIgnoreCase)).Key;
+
+                    // Fallback: try German
+                    if (internalName == default)
+                    {
+                        var deStrings = GameInfo.GetStrings("de");
+                        internalName = deStrings.VillagerMap.FirstOrDefault(z => string.Equals(z.Value, nameSearched.Trim(), StringComparison.InvariantCultureIgnoreCase)).Key;
+                    }
+                }
 
                 if (internalName == default)
                 {
@@ -108,12 +112,6 @@ namespace SysBot.ACNHOrders
         [RequireQueueRole(nameof(Globals.Bot.Config.RoleUseBot))]
         public async Task GetVillagerListAsync()
         {
-            if (!Globals.Bot.Config.DodoModeConfig.LimitedDodoRestoreOnlyMode)
-            {
-                await ReplyAsync($"{Context.User.Mention} - Villagers on the island may be replaceable by adding them to your order command.");
-                return;
-            }
-
             await ReplyAsync($"The following villagers are on {Globals.Bot.TownName}: {Globals.Bot.Villagers.LastVillagers}.").ConfigureAwait(false);
         }
         

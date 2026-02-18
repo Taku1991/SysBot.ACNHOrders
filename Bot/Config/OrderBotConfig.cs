@@ -33,7 +33,7 @@ namespace SysBot.ACNHOrders
         }
 
         /// <summary> Message to send at the end of the order completion string </summary>
-        public string CompleteOrderMessage { get; set; } = "Have a great day!";
+        public string CompleteOrderMessage { get; set; } = "Viel Spaß mit deinen Items!";
 
         /// <summary> If some of the inputs get eaten while talking to orville, should we try talking to him one more time? </summary>
         public bool RetryFetchDodoOnFail { get; set; } = true;
